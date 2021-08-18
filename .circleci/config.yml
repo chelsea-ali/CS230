@@ -1,0 +1,140 @@
+import pylab as p
+import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import datetime as datetime
+
+df = pd.read_csv("nyc_veh_crash_sample.csv")
+st.header("Vehicle Collisions in NYC 2015-2017")
+
+PageSelection = st.sidebar.selectbox('What are you more interested on?',("Frequency of collisions", "Causes of collisions"))
+
+##PART 1
+## Split 'Date' column into month, day, and year
+df['Month'] = df['DATE'].map(lambda x: int(x.split("/",2)[0]))
+df['Day'] = df['DATE'].map(lambda x: int(x.split("/",2)[1]))
+df['Year'] = df['DATE'].map(lambda x: int(x.split("/",2)[2]))
+
+# Create a new dataframe that defines which month falls into which quarter
+months_in_quarterdf = pd.DataFrame({'Month':[1,2,3,4,5,6,7,8,9,10,11,12], 'Quarter':[1,1,1,2,2,2,3,3,3,4,4,4]})
+
+## Merge that dataframe at 'Month' to get the quarter
+df = df.merge(months_in_quarterdf,how = 'inner',on='Month')
+
+if PageSelection == 'Frequency of collisions':
+    # Slider to filter the data according to the start date and end date
+    startDate = datetime.date(month=1, day=1, year=2015)    #the oldest date available in the data set
+    endDate = datetime.date(month=2, day=28, year=2017)      #the latest date available in the data set
+    slider = st.slider('Select date', min_value=startDate, value=[startDate,endDate], format='MMM DD, YYYY')
+    st.write("Selected date range:", slider[0],"to", slider[1])
+
+    lower = slider[0]
+    upper = slider[1]
+
+    lower_yr = slider[0].year
+    lower_mth = slider[0].month
+    lower_day = slider[0].day
+
+    upper_yr = slider[1].year
+    upper_mth = slider[1].month
+    upper_day = slider[1].day
+
+    # Create a datetime column for easy comparison
+    df['dated'] = pd.to_datetime(df[['Year','Month','Day']]).dt.date
+    df=df.sort_values(by=["DATE", "TIME"])
+    df=df.sort_values(by=["dated"])
+
+    # Filter lower and upper bound year
+    df = df[df['dated'].between(lower, upper)]
+    table_toshow = df
+
+    # Print the table
+    table_toshow
+
+    #Create dataframe for line chart
+    df['TOTAL INJURED'] = df['PERSONS INJURED'] + df['PEDESTRIANS INJURED'] + df['CYCLISTS INJURED'] + df['MOTORISTS INJURED']
+    df['TOTAL KILLED'] = df['PERSONS KILLED'] + df['PEDESTRIANS KILLED'] + df['CYCLISTS KILLED'] + df['MOTORISTS KILLED']
+
+    total_df = df[['TOTAL INJURED', 'TOTAL KILLED', 'Year', 'Quarter']].groupby(['Year', 'Quarter']).mean().reset_index()
+    total_df['Time'] = 'Q'+ total_df['Quarter'].astype(str) + ' '+ total_df['Year'].astype(str)
+
+    # Creating the line chart for total injured
+    plt.title("The mean of people injured every quarter from the starting quarter selected to the ending quarter selected")
+    plt.plot(total_df['Time'],total_df['TOTAL INJURED'],label = "Injured")
+    plt.plot(total_df['Time'],total_df['TOTAL KILLED'], label = 'Killed')
+    plt.legend(loc="upper left")
+    plt.xticks(rotation=45)
+    plt.xlabel("Quarter and Year")
+    plt.ylabel("Average number of people")
+    st.pyplot(fig=plt)
+
+if PageSelection == 'Causes of collisions':
+    ##PART 2
+    st.header("Causes of Collisions")
+
+    ## Input here : Select Vehicle Type (input must be string)
+    Options = st.selectbox(
+        "What is your vehicle type? (Select 'All' if you would like to look at the top 5 causes of collisions associated to all types of vehicles)",
+        ['All','Passenger Vehicle', 'Taxi', 'Sport utility/Station', 'Van', 'Bus', 'Bicycle', 'Motorcycle', 'Small Com Vehicle', 'Large Com Vehicle', 'Pick-up Truck'])
+    UserInput = Options
+    UnspecifiedFilter = st.selectbox(
+        "Would you like to filter out the 'Unspecified' cause of collisions?",
+        ['Yes','No']
+    )
+
+    # Pie chart of factors of vehicle crash
+    vehType1 = df[['VEHICLE 1 TYPE', 'VEHICLE 1 FACTOR','ZIP CODE']].groupby(['VEHICLE 1 TYPE','VEHICLE 1 FACTOR']).count().reset_index()
+    vehType1 = vehType1.rename(columns={'VEHICLE 1 TYPE':'VEHICLE TYPE','VEHICLE 1 FACTOR':'VEHICLE FACTOR','ZIP CODE':'COUNT'})
+
+    vehType2 = df[['VEHICLE 2 TYPE', 'VEHICLE 2 FACTOR','ZIP CODE']].groupby(['VEHICLE 2 TYPE','VEHICLE 2 FACTOR']).count().reset_index()
+    vehType2 = vehType2.rename(columns={'VEHICLE 2 TYPE':'VEHICLE TYPE','VEHICLE 2 FACTOR':'VEHICLE FACTOR','ZIP CODE':'COUNT'})
+
+    vehType3 = df[['VEHICLE 3 TYPE', 'VEHICLE 3 FACTOR','ZIP CODE']].groupby(['VEHICLE 3 TYPE','VEHICLE 3 FACTOR']).count().reset_index()
+    vehType3 = vehType3.rename(columns={'VEHICLE 3 TYPE':'VEHICLE TYPE','VEHICLE 3 FACTOR':'VEHICLE FACTOR','ZIP CODE':'COUNT'})
+
+    vehType4 = df[['VEHICLE 4 TYPE', 'VEHICLE 4 FACTOR','ZIP CODE']].groupby(['VEHICLE 4 TYPE','VEHICLE 4 FACTOR']).count().reset_index()
+    vehType4 = vehType4.rename(columns={'VEHICLE 4 TYPE':'VEHICLE TYPE','VEHICLE 4 FACTOR':'VEHICLE FACTOR','ZIP CODE':'COUNT'})
+
+    vehType5 = df[['VEHICLE 5 TYPE', 'VEHICLE 5 FACTOR','ZIP CODE']].groupby(['VEHICLE 5 TYPE','VEHICLE 5 FACTOR']).count().reset_index()
+    vehType5 = vehType5.rename(columns={'VEHICLE 5 TYPE':'VEHICLE TYPE','VEHICLE 5 FACTOR':'VEHICLE FACTOR','ZIP CODE':'COUNT'})
+
+    vehTypeAll = vehType1.append([vehType2,vehType3,vehType4,vehType5])
+
+    if UserInput == 'All':
+        if UnspecifiedFilter == 'Yes':
+            vehTypeAll = vehTypeAll[vehTypeAll['VEHICLE FACTOR'] != 'UNSPECIFIED']
+            plt.figure(figsize=(12, 10), dpi=80)
+            vehTypeAll = vehTypeAll.groupby('VEHICLE FACTOR').sum().reset_index()
+            vehTypeAll = vehTypeAll.sort_values('COUNT',ascending=False).head(5)
+            plt.title('The Pie Chart belows shows the Top 5 causes of collisions associated to the vehicle type selected')
+            plt.pie(vehTypeAll['COUNT'],labels = vehTypeAll['VEHICLE FACTOR'],autopct='%1.2f%%')
+            st.pyplot(fig=plt)
+        if UnspecifiedFilter == 'No':
+            plt.figure(figsize=(12, 10), dpi=80)
+            vehTypeAll = vehTypeAll.groupby('VEHICLE FACTOR').sum().reset_index()
+            vehTypeAll = vehTypeAll.sort_values('COUNT',ascending=False).head(5)
+            plt.title('The Pie Chart belows shows the Top 5 causes of collisions associated to the vehicle type selected')
+            plt.pie(vehTypeAll['COUNT'],labels = vehTypeAll['VEHICLE FACTOR'],autopct='%1.2f%%')
+            st.pyplot(fig=plt)
+
+    else:
+        vehTypeAll = vehTypeAll[vehTypeAll['VEHICLE TYPE'] == UserInput.upper()]
+
+        if UnspecifiedFilter == 'Yes':
+            vehTypeAll = vehTypeAll[vehTypeAll['VEHICLE FACTOR'] != 'UNSPECIFIED']
+            vehTypeAll = vehTypeAll.groupby('VEHICLE FACTOR').sum().reset_index()
+            vehTypeAll = vehTypeAll.sort_values('COUNT',ascending=False).head(5)
+
+            plt.figure(figsize=(12, 10), dpi=80)
+            plt.title('The Pie Chart belows shows the Top 5 causes of collisions associated to the vehicle type selected')
+            plt.pie(vehTypeAll['COUNT'],labels = vehTypeAll['VEHICLE FACTOR'],autopct='%1.2f%%')
+            st.pyplot(fig=plt)
+        if UnspecifiedFilter == 'No':
+            vehTypeAll = vehTypeAll.groupby('VEHICLE FACTOR').sum().reset_index()
+            vehTypeAll = vehTypeAll.sort_values('COUNT',ascending=False).head(5)
+
+            plt.figure(figsize=(12, 10), dpi=80)
+            plt.title('The Pie Chart belows shows the Top 5 causes of collisions associated to the vehicle type selected')
+            plt.pie(vehTypeAll['COUNT'],labels = vehTypeAll['VEHICLE FACTOR'],autopct='%1.2f%%')
+            st.pyplot(fig=plt)
